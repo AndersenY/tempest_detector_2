@@ -207,16 +207,16 @@ class SpectrumPlotWidget(QWidget):
             },
         )
         line.setPos(freq_mhz)
+        line.setHoverPen(pg.mkPen("#FFB74D", width=2.5, style=Qt.PenStyle.SolidLine))
         # Подключаем сигнал наведения для подсветки в таблице
-        line.hoverEvent = lambda ev: self._on_mark_hover(ev, freq_mhz)
+        line.sigHovered.connect(lambda ev: self._on_mark_hovered_emit(freq_mhz))
         self.plot.addItem(line)
         self._panorama_marks.append(line)
         self.freq_mark_added.emit(freq_mhz)
 
-    def _on_mark_hover(self, event, freq_mhz: float) -> None:
+    def _on_mark_hovered_emit(self, freq_mhz: float) -> None:
         """Обработка наведения на метку — выделяем строку в таблице."""
-        if event.isEnter():
-            self.freq_mark_hovered.emit(freq_mhz)
+        self.freq_mark_hovered.emit(freq_mhz)
 
     def clear_panorama_marks(self) -> None:
         for line in self._panorama_marks:

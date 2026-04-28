@@ -720,7 +720,8 @@ class MainWindow(QMainWindow):
     def _start_panorama_preview(self) -> None:
         """Запускает live-просмотр спектра поверх графика панорамы."""
         self.current_step = "live_preview"
-        self._set_settings_enabled(False)
+        # Панель параметров остаётся доступной для изменения настроек в режиме просмотра
+        self._set_settings_enabled(True)
         self.btn_action.setText("▶  ЗАПУСТИТЬ ИЗМЕРЕНИЕ ПАНОРАМЫ")
         self.btn_action.setEnabled(True)
         self.btn_stop.setEnabled(True)

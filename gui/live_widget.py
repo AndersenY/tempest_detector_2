@@ -31,7 +31,6 @@ class LiveWidget(QWidget):
         self._frame_count = 0
         self._marked_lines: list = []
         self.marked_freqs_mhz: list[float] = []
-        self._hover_line = None
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -285,26 +284,14 @@ class LiveWidget(QWidget):
             },
         )
         line.setPos(freq_mhz)
+        line.setHoverPen(pg.mkPen("#FFB74D", width=2.5, style=Qt.PenStyle.SolidLine))
         # Подключаем сигнал наведения для подсветки в таблице
-        line.hoverEvent = lambda ev: self._on_mark_hover(ev, freq_mhz)
+        line.sigHovered.connect(lambda ev: self.mark_hovered.emit(freq_mhz))
         self._pw.getPlotItem().addItem(line)
         self._marked_lines.append(line)
         self.marked_freqs_mhz.append(freq_mhz)
         self._update_mark_label()
         self.freq_marked.emit(freq_mhz)
-
-    def _on_mark_hover(self, event, freq_mhz: float) -> None:
-        """Обработка наведения на метку — выделяем строку в таблице."""
-        if event.isExit():
-            self._clear_hover_highlight()
-        elif event.isEnter():
-            self.mark_hovered.emit(freq_mhz)
-
-    def _clear_hover_highlight(self) -> None:
-        """Очищает подсветку при уходе курсора с метки."""
-        if self._hover_line is not None:
-            self._pw.getPlotItem().removeItem(self._hover_line)
-            self._hover_line = None
 
     def _update_mark_label(self) -> None:
         n = len(self.marked_freqs_mhz)
