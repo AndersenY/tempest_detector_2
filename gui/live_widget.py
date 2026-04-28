@@ -182,6 +182,9 @@ class LiveWidget(QWidget):
             legend.setBrush(pg.mkBrush(10, 10, 18, 220))
             legend.setLabelTextColor(pg.mkColor("#999"))
 
+        # Подключаемся к событию наведения мыши на сцене для подсветки меток
+        self._pw.scene().sigMouseHover.connect(self._on_scene_mouse_hover)
+
         self._pw.scene().sigMouseClicked.connect(self._on_plot_click)
 
         w = QWidget()
@@ -285,13 +288,36 @@ class LiveWidget(QWidget):
         )
         line.setPos(freq_mhz)
         line.setHoverPen(pg.mkPen("#FFB74D", width=2.5, style=Qt.PenStyle.SolidLine))
-        # Подключаем сигнал наведения для подсветки в таблице
-        line.sigHovered.connect(lambda ev: self.mark_hovered.emit(freq_mhz))
+        # Сохраняем частоту в объекте линии для последующего использования
+        line._freq_mhz = freq_mhz
         self._pw.getPlotItem().addItem(line)
         self._marked_lines.append(line)
         self.marked_freqs_mhz.append(freq_mhz)
         self._update_mark_label()
         self.freq_marked.emit(freq_mhz)
+
+    def _on_scene_mouse_hover(self, pos):
+        """Обработка наведения мыши на сцену для подсветки меток."""
+        # Проверяем все метки
+        for line in self._marked_lines:
+            # Получаем позицию линии
+            line_x = line.pos().x()
+            # Проверяем, находится ли курсор достаточно близко к линии
+            view_pos = self._pw.getPlotItem().getViewBox().mapSceneToView(pos)
+            view_range = self._pw.getPlotItem().getViewBox().viewRange()[0]
+            x_range = view_range[1] - view_range[0]
+            threshold = x_range * 0.01  # 1% от диапазона частот
+            
+            if abs(view_pos.x() - line_x) < threshold:
+                # Наведение на метку
+                line.setMouseHover(True)
+                if hasattr(line, '_freq_mhz'):
+                    self.mark_hovered.emit(line._freq_mhz)
+                return
+        
+        # Если не навели ни на одну метку, снимаем подсветку со всех
+        for line in self._marked_lines:
+            line.setMouseHover(False)
 
     def _update_mark_label(self) -> None:
         n = len(self.marked_freqs_mhz)
