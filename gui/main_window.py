@@ -143,13 +143,13 @@ class MainWindow(QMainWindow):
 
         self.act_mode_live = QAction("📡  Прямой эфир  (SDR)", self)
         self.act_mode_live.setCheckable(True)
-        self.act_mode_live.triggered.connect(lambda: self._set_scan_mode("live"))
+        self.act_mode_live.setEnabled(False)  # Отключено: теперь часть режима разности панорам
         mode_group.addAction(self.act_mode_live)
         menu_mode.addAction(self.act_mode_live)
 
         self.act_mode_live_sim = QAction("📡  Прямой эфир  (симулятор)", self)
         self.act_mode_live_sim.setCheckable(True)
-        self.act_mode_live_sim.triggered.connect(lambda: self._set_scan_mode("live_sim"))
+        self.act_mode_live_sim.setEnabled(False)  # Отключено: теперь часть режима разности панорам
         mode_group.addAction(self.act_mode_live_sim)
         menu_mode.addAction(self.act_mode_live_sim)
 
@@ -252,10 +252,12 @@ class MainWindow(QMainWindow):
         self.plot.freq_clicked.connect(self._on_graph_click)
         self.plot.live_overlay_toggled.connect(self._on_panorama_live_toggled)
         self.plot.freq_mark_added.connect(self._on_panorama_freq_marked)
+        self.plot.freq_mark_hovered.connect(self._on_mark_hovered)
         self.zero_span_widget = ZeroSpanWidget()
         self.live_widget = LiveWidget()
         self.live_widget.freq_marked.connect(self._on_live_freq_marked)
         self.live_widget.freq_selected.connect(self._on_live_graph_freq_clicked)
+        self.live_widget.mark_hovered.connect(self._on_mark_hovered)
         self._spectrum_stack = QStackedWidget()
         self._spectrum_stack.addWidget(self.plot)            # index 0 — спектр
         self._spectrum_stack.addWidget(self.zero_span_widget)  # index 1 — zero span
@@ -630,10 +632,8 @@ class MainWindow(QMainWindow):
             ctrl._MEASURE_DELAY_S = 0.0
 
         self.current_step = "live"
-        # Блокируем всё кроме частотного диапазона — его можно менять во время live
-        for w in self._settings_widgets:
-            if w not in (self.spin_start_freq, self.spin_stop_freq):
-                w.setEnabled(False)
+        # В режиме live панель параметров остаётся доступной для изменения настроек
+        # Блокировка произойдёт только при запуске измерения панорамы
         self.btn_action.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self._stop_zero_span()
@@ -643,6 +643,8 @@ class MainWindow(QMainWindow):
         self._spectrum_stack.setCurrentIndex(2)
         self.expert_panel.set_zero_span_active(False)
         self.expert_panel.enable_remeasure(False)
+        # Разблокируем панель параметров в live-режиме
+        self._set_settings_enabled(True)
 
         src = "симулятор" if use_sim else "SDR"
         self.lbl_instruction.setText(
@@ -681,6 +683,8 @@ class MainWindow(QMainWindow):
         live_cfg.fft_size = 2048
         live_cfg.averaging_count = 1
         live_cfg.use_max_hold = False
+        live_cfg.sdr_gain_db = self.spin_gain.value()
+        live_cfg.threshold_db = self.spin_threshold.value()
         if self.chk_single_bw.isChecked():
             center = (start_hz + stop_hz) / 2
             live_cfg.start_freq_hz = max(center - 1_000_000, 24e6)
@@ -693,6 +697,15 @@ class MainWindow(QMainWindow):
             self._live_worker.stop()
             self._live_worker.wait(2000)
             self._live_worker = None
+        # Отключаем обработку изменений частоты в live-режиме
+        try:
+            self.spin_start_freq.valueChanged.disconnect(self._on_live_freq_range_changed)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.spin_stop_freq.valueChanged.disconnect(self._on_live_freq_range_changed)
+        except (TypeError, RuntimeError):
+            pass
 
     def _on_live_spectrum(self, freqs_hz, amps_db) -> None:
         self.live_widget.update_spectrum(freqs_hz, amps_db)
@@ -707,7 +720,8 @@ class MainWindow(QMainWindow):
     def _start_panorama_preview(self) -> None:
         """Запускает live-просмотр спектра поверх графика панорамы."""
         self.current_step = "live_preview"
-        self._set_settings_enabled(False)
+        # Панель параметров остаётся доступной для изменения настроек в режиме просмотра
+        self._set_settings_enabled(True)
         self.btn_action.setText("▶  ЗАПУСТИТЬ ИЗМЕРЕНИЕ ПАНОРАМЫ")
         self.btn_action.setEnabled(True)
         self.btn_stop.setEnabled(True)
@@ -761,6 +775,9 @@ class MainWindow(QMainWindow):
     def _launch_measurement_from_preview(self) -> None:
         """Переход от live preview к реальному измерению панорамы."""
         self._stop_panorama_preview()
+        # Применяем текущие настройки из панели параметров перед запуском измерения
+        if not self._apply_settings_to_cfg():
+            return
         try:
             self.ctrl.configure(self.cfg)
         except Exception:
@@ -1288,6 +1305,29 @@ class MainWindow(QMainWindow):
         if not any(abs(f - freq_hz) < 100e3 for f in self._bookmark_freqs_hz):
             self._bookmark_freqs_hz.append(freq_hz)
         self._refresh_bookmark_table()
+
+    def _on_mark_hovered(self, freq_mhz: float) -> None:
+        """При наведении на метку — выделяем соответствующую строку в таблице."""
+        freq_hz = freq_mhz * 1e6
+        # Ищем ближайшую частоту в закладках
+        if not self._bookmark_freqs_hz:
+            return
+        nearest_hz = min(self._bookmark_freqs_hz, key=lambda f: abs(f - freq_hz))
+        if abs(nearest_hz - freq_hz) > 1e6:  # 1 МГц допуск
+            return
+        target_mhz = nearest_hz / 1e6
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item:
+                try:
+                    if abs(float(item.text()) - target_mhz) < 0.01:
+                        self.table.blockSignals(True)
+                        self.table.selectRow(row)
+                        self.table.blockSignals(False)
+                        self.table.scrollTo(self.table.model().index(row, 0))
+                        break
+                except ValueError:
+                    pass
 
     def _refresh_bookmark_table(self) -> None:
         if self.wf and hasattr(self.wf, "signals") and self.wf.signals:

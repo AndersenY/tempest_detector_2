@@ -9,6 +9,7 @@ class SpectrumPlotWidget(QWidget):
     freq_clicked = pyqtSignal(float)          # МГц, клик в обычном режиме
     live_overlay_toggled = pyqtSignal(bool)   # запрос live overlay
     freq_mark_added = pyqtSignal(float)       # МГц, добавлена метка в режиме меток
+    freq_mark_hovered = pyqtSignal(float)     # МГц, наведение на метку
 
     def __init__(self):
         super().__init__()
@@ -30,6 +31,9 @@ class SpectrumPlotWidget(QWidget):
         self.plot.setDownsampling(auto=True, mode="peak")
         self.plot.setAutoVisible(y=True)
         self.plot.setAntialiasing(True)
+
+        # Подключаемся к событию наведения мыши на сцене
+        self.plot.scene().sigMouseHover.connect(self._on_scene_mouse_hover)
 
         self.legend = self.plot.addLegend(offset=(10, 10))
         if self.legend:
@@ -206,9 +210,43 @@ class SpectrumPlotWidget(QWidget):
             },
         )
         line.setPos(freq_mhz)
+        line.setHoverPen(pg.mkPen("#FFB74D", width=2.5, style=Qt.PenStyle.SolidLine))
+        # Сохраняем частоту в объекте линии для последующего использования
+        line._freq_mhz = freq_mhz
         self.plot.addItem(line)
         self._panorama_marks.append(line)
         self.freq_mark_added.emit(freq_mhz)
+
+    def _on_mark_hovered_emit(self, freq_mhz: float) -> None:
+        """Обработка наведения на метку — выделяем строку в таблице."""
+        self.freq_mark_hovered.emit(freq_mhz)
+
+    def _on_scene_mouse_hover(self, pos):
+        """Обработка наведения мыши на сцену для подсветки меток."""
+        # pos приходит как список [x, y], преобразуем в QPointF
+        if isinstance(pos, list) and len(pos) >= 2:
+            pos = QtCore.QPointF(pos[0], pos[1])
+        
+        # Проверяем все метки панорамы
+        for line in self._panorama_marks:
+            # Получаем позицию линии
+            line_x = line.pos().x()
+            # Проверяем, находится ли курсор достаточно близко к линии
+            view_pos = self.plot.getPlotItem().getViewBox().mapSceneToView(pos)
+            view_range = self.plot.getPlotItem().getViewBox().viewRange()[0]
+            x_range = view_range[1] - view_range[0]
+            threshold = x_range * 0.01  # 1% от диапазона частот
+            
+            if abs(view_pos.x() - line_x) < threshold:
+                # Наведение на метку
+                line.setMouseHover(True)
+                if hasattr(line, '_freq_mhz'):
+                    self._on_mark_hovered_emit(line._freq_mhz)
+                return
+        
+        # Если не навели ни на одну метку, снимаем подсветку со всех
+        for line in self._panorama_marks:
+            line.setMouseHover(False)
 
     def clear_panorama_marks(self) -> None:
         for line in self._panorama_marks:

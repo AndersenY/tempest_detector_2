@@ -1,7 +1,1 @@
-CLAUDE.md
-__pycache__/
-*.pyc
-*.pyo
-*.csv
-*.npz
-.vscode/
+Nothing needs to be added to the .gitignore file based on the provided file changes. The modified files (`gui/live_widget.py` and `gui/spectrum_widget.py`) are Python source code files which should not be ignored.
