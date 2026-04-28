@@ -630,10 +630,8 @@ class MainWindow(QMainWindow):
             ctrl._MEASURE_DELAY_S = 0.0
 
         self.current_step = "live"
-        # Блокируем всё кроме частотного диапазона — его можно менять во время live
-        for w in self._settings_widgets:
-            if w not in (self.spin_start_freq, self.spin_stop_freq):
-                w.setEnabled(False)
+        # В режиме live панель параметров остаётся доступной для изменения настроек
+        # Блокировка произойдёт только при запуске измерения панорамы
         self.btn_action.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self._stop_zero_span()
@@ -681,6 +679,8 @@ class MainWindow(QMainWindow):
         live_cfg.fft_size = 2048
         live_cfg.averaging_count = 1
         live_cfg.use_max_hold = False
+        live_cfg.sdr_gain_db = self.spin_gain.value()
+        live_cfg.threshold_db = self.spin_threshold.value()
         if self.chk_single_bw.isChecked():
             center = (start_hz + stop_hz) / 2
             live_cfg.start_freq_hz = max(center - 1_000_000, 24e6)
@@ -761,6 +761,9 @@ class MainWindow(QMainWindow):
     def _launch_measurement_from_preview(self) -> None:
         """Переход от live preview к реальному измерению панорамы."""
         self._stop_panorama_preview()
+        # Применяем текущие настройки из панели параметров перед запуском измерения
+        if not self._apply_settings_to_cfg():
+            return
         try:
             self.ctrl.configure(self.cfg)
         except Exception:
