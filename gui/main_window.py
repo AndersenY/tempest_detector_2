@@ -252,10 +252,12 @@ class MainWindow(QMainWindow):
         self.plot.freq_clicked.connect(self._on_graph_click)
         self.plot.live_overlay_toggled.connect(self._on_panorama_live_toggled)
         self.plot.freq_mark_added.connect(self._on_panorama_freq_marked)
+        self.plot.freq_mark_hovered.connect(self._on_mark_hovered)
         self.zero_span_widget = ZeroSpanWidget()
         self.live_widget = LiveWidget()
         self.live_widget.freq_marked.connect(self._on_live_freq_marked)
         self.live_widget.freq_selected.connect(self._on_live_graph_freq_clicked)
+        self.live_widget.mark_hovered.connect(self._on_mark_hovered)
         self._spectrum_stack = QStackedWidget()
         self._spectrum_stack.addWidget(self.plot)            # index 0 — спектр
         self._spectrum_stack.addWidget(self.zero_span_widget)  # index 1 — zero span
@@ -641,6 +643,8 @@ class MainWindow(QMainWindow):
         self._spectrum_stack.setCurrentIndex(2)
         self.expert_panel.set_zero_span_active(False)
         self.expert_panel.enable_remeasure(False)
+        # Разблокируем панель параметров в live-режиме
+        self._set_settings_enabled(True)
 
         src = "симулятор" if use_sim else "SDR"
         self.lbl_instruction.setText(
@@ -693,6 +697,15 @@ class MainWindow(QMainWindow):
             self._live_worker.stop()
             self._live_worker.wait(2000)
             self._live_worker = None
+        # Отключаем обработку изменений частоты в live-режиме
+        try:
+            self.spin_start_freq.valueChanged.disconnect(self._on_live_freq_range_changed)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.spin_stop_freq.valueChanged.disconnect(self._on_live_freq_range_changed)
+        except (TypeError, RuntimeError):
+            pass
 
     def _on_live_spectrum(self, freqs_hz, amps_db) -> None:
         self.live_widget.update_spectrum(freqs_hz, amps_db)
@@ -1291,6 +1304,29 @@ class MainWindow(QMainWindow):
         if not any(abs(f - freq_hz) < 100e3 for f in self._bookmark_freqs_hz):
             self._bookmark_freqs_hz.append(freq_hz)
         self._refresh_bookmark_table()
+
+    def _on_mark_hovered(self, freq_mhz: float) -> None:
+        """При наведении на метку — выделяем соответствующую строку в таблице."""
+        freq_hz = freq_mhz * 1e6
+        # Ищем ближайшую частоту в закладках
+        if not self._bookmark_freqs_hz:
+            return
+        nearest_hz = min(self._bookmark_freqs_hz, key=lambda f: abs(f - freq_hz))
+        if abs(nearest_hz - freq_hz) > 1e6:  # 1 МГц допуск
+            return
+        target_mhz = nearest_hz / 1e6
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item:
+                try:
+                    if abs(float(item.text()) - target_mhz) < 0.01:
+                        self.table.blockSignals(True)
+                        self.table.selectRow(row)
+                        self.table.blockSignals(False)
+                        self.table.scrollTo(self.table.model().index(row, 0))
+                        break
+                except ValueError:
+                    pass
 
     def _refresh_bookmark_table(self) -> None:
         if self.wf and hasattr(self.wf, "signals") and self.wf.signals:

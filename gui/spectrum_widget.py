@@ -9,6 +9,7 @@ class SpectrumPlotWidget(QWidget):
     freq_clicked = pyqtSignal(float)          # МГц, клик в обычном режиме
     live_overlay_toggled = pyqtSignal(bool)   # запрос live overlay
     freq_mark_added = pyqtSignal(float)       # МГц, добавлена метка в режиме меток
+    freq_mark_hovered = pyqtSignal(float)     # МГц, наведение на метку
 
     def __init__(self):
         super().__init__()
@@ -206,9 +207,16 @@ class SpectrumPlotWidget(QWidget):
             },
         )
         line.setPos(freq_mhz)
+        # Подключаем сигнал наведения для подсветки в таблице
+        line.hoverEvent = lambda ev: self._on_mark_hover(ev, freq_mhz)
         self.plot.addItem(line)
         self._panorama_marks.append(line)
         self.freq_mark_added.emit(freq_mhz)
+
+    def _on_mark_hover(self, event, freq_mhz: float) -> None:
+        """Обработка наведения на метку — выделяем строку в таблице."""
+        if event.isEnter():
+            self.freq_mark_hovered.emit(freq_mhz)
 
     def clear_panorama_marks(self) -> None:
         for line in self._panorama_marks:
