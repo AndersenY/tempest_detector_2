@@ -1,7 +1,1 @@
-CLAUDE.md
-__pycache__/
-*.pyc
-*.pyo
-*.csv
-*.npz
-.vscode/
+Nothing should be ignored based on the provided file changes. The only modified file is `gui/main_window.py`, which is a Python source code file and should not be added to .gitignore.

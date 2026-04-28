@@ -143,13 +143,13 @@ class MainWindow(QMainWindow):
 
         self.act_mode_live = QAction("📡  Прямой эфир  (SDR)", self)
         self.act_mode_live.setCheckable(True)
-        self.act_mode_live.triggered.connect(lambda: self._set_scan_mode("live"))
+        self.act_mode_live.setEnabled(False)  # Отключено: теперь часть режима разности панорам
         mode_group.addAction(self.act_mode_live)
         menu_mode.addAction(self.act_mode_live)
 
         self.act_mode_live_sim = QAction("📡  Прямой эфир  (симулятор)", self)
         self.act_mode_live_sim.setCheckable(True)
-        self.act_mode_live_sim.triggered.connect(lambda: self._set_scan_mode("live_sim"))
+        self.act_mode_live_sim.setEnabled(False)  # Отключено: теперь часть режима разности панорам
         mode_group.addAction(self.act_mode_live_sim)
         menu_mode.addAction(self.act_mode_live_sim)
 
