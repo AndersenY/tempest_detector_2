@@ -298,6 +298,11 @@ class LiveWidget(QWidget):
 
     def _on_scene_mouse_hover(self, pos):
         """Обработка наведения мыши на сцену для подсветки меток."""
+        # pos приходит как список [x, y], преобразуем в QPointF
+        if isinstance(pos, list) and len(pos) >= 2:
+            from PyQt6.QtCore import QPointF
+            pos = QPointF(pos[0], pos[1])
+        
         # Проверяем все метки
         for line in self._marked_lines:
             # Получаем позицию линии

@@ -223,6 +223,10 @@ class SpectrumPlotWidget(QWidget):
 
     def _on_scene_mouse_hover(self, pos):
         """Обработка наведения мыши на сцену для подсветки меток."""
+        # pos приходит как список [x, y], преобразуем в QPointF
+        if isinstance(pos, list) and len(pos) >= 2:
+            pos = QtCore.QPointF(pos[0], pos[1])
+        
         # Проверяем все метки панорамы
         for line in self._panorama_marks:
             # Получаем позицию линии
